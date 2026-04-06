@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Социальный рейтинг D&D</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none; /* легче тапать на телефоне, но текст копировать можно */
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+            background: #1e2a2e;
+            margin: 0;
+            padding: 12px;
+            color: #f0f0f0;
+        }
+        .container {
+            max-width: 100%;
+            overflow-x: auto;
+            background: #0f1720;
+            border-radius: 24px;
+            padding: 8px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            min-width: 600px;
+        }
+        th, td {
+            border: 1px solid #2d3e44;
+            padding: 12px 6px;
+            text-align: center;
+            vertical-align: middle;
+            background-color: #1e2a2e;
+        }
+        th {
+            background-color: #0b1a1f;
+            font-weight: bold;
+            color: #ffd966;
+            position: sticky;
+            top: 0;
+            backdrop-filter: blur(4px);
+        }
+        .player-col {
+            background-color: #16262b;
+            font-weight: bold;
+            color: #c9e9ff;
+            position: sticky;
+            left: 0;
+            z-index: 2;
+        }
+        .rating-cell {
+            font-weight: bold;
+            font-size: 1.2em;
+            cursor: pointer;
+            transition: 0.1s linear;
+            min-width: 55px;
+        }
+        .rating-cell.edit-mode {
+            background-color: #2a3f48;
+            box-shadow: inset 0 0 0 2px #ffaa33;
+        }
+        /* цветовая шкала от 0 до 100 */
+        .rating-low {
+            background-color: #6d2e2e;
+            color: #ffb3b3;
+        }
+        .rating-mid {
+            background-color: #6b5a2c;
+            color: #fff0b5;
+        }
+        .rating-high {
+            background-color: #1f6d43;
+            color: #d0ffd0;
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            gap: 12px;
+            background: #0f1720;
+            padding: 12px 18px;
+            border-radius: 48px;
+        }
+        button {
+            background: #2d4a5c;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 40px;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+            transition: 0.1s;
+            box-shadow: 0 1px 3px black;
+        }
+        button:active {
+            transform: scale(0.97);
+        }
+        .master-panel {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        input, select {
+            padding: 8px 12px;
+            border-radius: 32px;
+            border: none;
+            background: #2a3f48;
+            color: white;
+            font-size: 14px;
+        }
+        .status {
+            background: #00000066;
+            padding: 6px 14px;
+            border-radius: 32px;
+            font-size: 12px;
+        }
+        h2 {
+            margin: 0;
+            font-size: 1.4rem;
+        }
+        .footer {
+            margin-top: 16px;
+            text-align: center;
+            font-size: 11px;
+            color: #7e9aa5;
+        }
+        @media (max-width: 700px) {
+            th, td {
+                padding: 8px 4px;
+                font-size: 12px;
+            }
+            .rating-cell {
+                font-size: 1em;
+            }
+            button {
+                padding: 6px 14px;
+            }
+        }
+    </style>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+</head>
+<body>
+<div class="controls">
+    <h2>?? Социальный рейтинг</h2>
+    <div class="master-panel">
+        <input type="password" id="masterPassword" placeholder="Пароль мастера">
+        <button id="enableEditBtn">?? Войти как мастер</button>
+        <button id="disableEditBtn" style="background:#5a3a2c;">?? Выйти</button>
+        <span id="editModeStatus" class="status">??? Только просмотр</span>
+    </div>
+</div>
+<div class="container">
+    <table id="ratingTable">
+        <thead id="tableHeader">
+        <!-- заголовки будут заполнены скриптом -->
+        </thead>
+        <tbody id="tableBody">
+        <!-- строки игроков -->
+        </tbody>
+    </table>
+</div>
+<div class="footer">
+    ?? изменения сохраняются автоматически • нажми на ячейку для изменения (только мастер)
+</div>
+
+<script>
+    // ------------------- НАСТРОЙКИ FIREBASE -------------------
+    // ЗАМЕНИТЕ ЭТИ ДАННЫЕ НА СВОИ (из консоли Firebase)
+    const firebaseConfig = {
+  	apiKey: "AIzaSyBHDv2_O-E-t7n9NYJuxONPe4IWepLXq7Q",
+  	authDomain: "myhero-18e1abe3.firebaseapp.com",
+  	projectId: "myhero-18e1abe3",
+  	storageBucket: "myhero-18e1abe3.firebasestorage.app",
+  	messagingSenderId: "976888612108",
+ 	 appId: "1:976888612108:web:9e8dadabf95d8e27a87529"
+	};
+    // ----------------------------------------------------------
+
+    // Инициализация Firebase
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    const ratingsRef = database.ref('socialRatings');
+
+    // Данные по умолчанию (игроки + фракции)
+    const PLAYERS = [
+        { id: "p1", name: "Арагорн" },
+        { id: "p2", name: "Леголас" },
+        { id: "p3", name: "Гимли" },
+        { id: "p4", name: "Гэндальф" },
+        { id: "p5", name: "Фродо" }
+    ];
+
+    const FACTIONS = [
+        { id: "f1", name: "??? Гильдия торговцев" },
+        { id: "f2", name: "?? Культисты" },
+        { id: "f3", name: "?? Знать высшая" },
+        { id: "f4", name: "?? Знать низшая" },
+        { id: "f5", name: "? Церковники (общая)" },
+        { id: "f6", name: "??? Храмовники" },
+        { id: "f7", name: "?? Инквизиция" },
+        { id: "f8", name: "??? Гильдия воров" },
+        { id: "f9", name: "?? Гильдия ремесленников" },
+        { id: "f10", name: "??? Горожане" }
+    ];
+
+    let currentEditMode = false;   // может ли текущий пользователь редактировать
+    const MASTER_PASSWORD = "DM2026";   // пароль мастера (поменяйте при желании)
+
+    // DOM элементы
+    const masterPasswordInput = document.getElementById('masterPassword');
+    const enableEditBtn = document.getElementById('enableEditBtn');
+    const disableEditBtn = document.getElementById('disableEditBtn');
+    const editModeStatus = document.getElementById('editModeStatus');
+    const tableHeader = document.getElementById('tableHeader');
+    const tableBody = document.getElementById('tableBody');
+
+    // -----------------------------------------------------------
+    // 1. Генерация таблицы (заголовки + пустые строки)
+    function renderTableStructure() {
+        // Заголовки: первый столбец "Игроки", затем все фракции
+        let headerHtml = '<tr><th class="player-col">?? Игроки</th>';
+        FACTIONS.forEach(f => {
+            headerHtml += `<th>${f.name}</th>`;
+        });
+        headerHtml += '</tr>';
+        tableHeader.innerHTML = headerHtml;
+
+        // Строки игроков (пока без данных, заполним позже)
+        let bodyHtml = '';
+        PLAYERS.forEach(player => {
+            bodyHtml += `<tr data-player-id="${player.id}">
+                            <td class="player-col">${player.name}</td>`;
+            FACTIONS.forEach(faction => {
+                bodyHtml += `<td class="rating-cell" data-player="${player.id}" data-faction="${faction.id}" data-value="50">50</td>`;
+            });
+            bodyHtml += `</tr>`;
+        });
+        tableBody.innerHTML = bodyHtml;
+    }
+
+    // 2. Обновление отображения всех ячеек из текущих данных (data-атрибуты или напрямую)
+    function updateTableFromData(dataObj) {
+        // dataObj ожидается вида: { "p1_f1": 45, "p1_f2": 70, ... }
+        for (let player of PLAYERS) {
+            for (let faction of FACTIONS) {
+                const key = `${player.id}_${faction.id}`;
+                let value = (dataObj && dataObj[key] !== undefined) ? dataObj[key] : 50;
+                const cell = document.querySelector(`td[data-player="${player.id}"][data-faction="${faction.id}"]`);
+                if (cell) {
+                    cell.innerText = value;
+                    cell.setAttribute('data-value', value);
+                    // применяем цветовую стилизацию
+                    applyColorClass(cell, value);
+                }
+            }
+        }
+    }
+
+    function applyColorClass(cell, val) {
+        val = Number(val);
+        cell.classList.remove('rating-low', 'rating-mid', 'rating-high');
+        if (val < 30) cell.classList.add('rating-low');
+        else if (val >= 30 && val <= 70) cell.classList.add('rating-mid');
+        else cell.classList.add('rating-high');
+    }
+
+    // 3. Загрузка данных из Firebase и отрисовка
+    function loadRatingsAndRender() {
+        ratingsRef.on('value', (snapshot) => {
+            const dbData = snapshot.val();
+            if (dbData && typeof dbData === 'object') {
+                updateTableFromData(dbData);
+            } else {
+                // если в БД ничего нет, инициализируем значениями по умолчанию (50)
+                const defaultData = {};
+                for (let p of PLAYERS) {
+                    for (let f of FACTIONS) {
+                        defaultData[`${p.id}_${f.id}`] = 50;
+                    }
+                }
+                updateTableFromData(defaultData);
+                // сохраняем дефолт в базу (при первом запуске)
+                ratingsRef.set(defaultData);
+            }
+        });
+    }
+
+    // 4. Сохранение конкретной ячейки в Firebase
+    function saveRating(playerId, factionId, newValue) {
+        const key = `${playerId}_${factionId}`;
+        const updateObj = {};
+        updateObj[key] = Number(newValue);
+        ratingsRef.update(updateObj);
+    }
+
+    // 5. Обработчик клика по ячейке (изменение рейтинга)
+    function attachCellClickHandlers() {
+        const cells = document.querySelectorAll('.rating-cell');
+        cells.forEach(cell => {
+            cell.removeEventListener('click', cellClickHandler);
+            cell.addEventListener('click', cellClickHandler);
+        });
+    }
+
+    async function cellClickHandler(event) {
+        const cell = event.currentTarget;
+        if (!currentEditMode) {
+            // уведомление без надоедания – через временный тултип
+            const toast = document.createElement('div');
+            toast.innerText = '? Только просмотр. Войдите как мастер.';
+            toast.style.position = 'fixed';
+            toast.style.bottom = '20px';
+            toast.style.left = '50%';
+            toast.style.transform = 'translateX(-50%)';
+            toast.style.background = '#8b3c2c';
+            toast.style.color = 'white';
+            toast.style.padding = '8px 16px';
+            toast.style.borderRadius = '40px';
+            toast.style.zIndex = '999';
+            toast.style.fontSize = '12px';
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 1500);
+            return;
+        }
+
+        const playerId = cell.getAttribute('data-player');
+        const factionId = cell.getAttribute('data-faction');
+        let currentVal = parseInt(cell.getAttribute('data-value'), 10);
+        // простое диалоговое окно с выбором + / - или вводом числа
+        const newVal = await promptChangeValue(currentVal);
+        if (newVal !== null && !isNaN(newVal) && newVal >= 0 && newVal <= 100) {
+            cell.innerText = newVal;
+            cell.setAttribute('data-value', newVal);
+            applyColorClass(cell, newVal);
+            saveRating(playerId, factionId, newVal);
+        } else if (newVal !== null) {
+            alert('Рейтинг должен быть от 0 до 100');
+        }
+    }
+
+    function promptChangeValue(current) {
+        return new Promise((resolve) => {
+            // мобильный дружественный prompt
+            let result = window.prompt(`Изменить рейтинг (0-100):`, current);
+            if (result === null) resolve(null);
+            else resolve(parseInt(result, 10));
+        });
+    }
+
+    // 6. Режим мастера (включение/выключение)
+    function enableEditMode() {
+        currentEditMode = true;
+        editModeStatus.innerText = '?? Режим мастера (можно редактировать)';
+        editModeStatus.style.background = '#2c5e2e';
+        document.querySelectorAll('.rating-cell').forEach(cell => {
+            cell.classList.add('edit-mode');
+        });
+    }
+
+    function disableEditMode() {
+        currentEditMode = false;
+        editModeStatus.innerText = '??? Только просмотр';
+        editModeStatus.style.background = '#00000066';
+        document.querySelectorAll('.rating-cell').forEach(cell => {
+            cell.classList.remove('edit-mode');
+        });
+    }
+
+    // проверка пароля
+    enableEditBtn.addEventListener('click', () => {
+        const entered = masterPasswordInput.value;
+        if (entered === MASTER_PASSWORD) {
+            enableEditMode();
+            masterPasswordInput.value = '';
+        } else {
+            alert('Неверный пароль мастера!');
+        }
+    });
+
+    disableEditBtn.addEventListener('click', () => {
+        disableEditMode();
+    });
+
+    // 7. Инициализация приложения
+    function init() {
+        renderTableStructure();       // строим таблицу
+        loadRatingsAndRender();       // подписываемся на БД и рисуем цифры
+        // небольшая задержка, чтобы данные из БД подтянулись, потом вешаем клики
+        setTimeout(() => {
+            attachCellClickHandlers();
+            // если мастер случайно уже в режиме? нет, по умолчанию false
+            disableEditMode();
+        }, 300);
+        // также перевешиваем клики при возможном обновлении таблицы (но у нас структура статична, только данные меняются)
+        ratingsRef.on('value', () => {
+            // после каждого обновления из БД (например, другой игрок что-то меняет? но только мастер может менять)
+            // перепривяжем клики, чтобы новые ячейки (их нет, все те же) получили обработчик
+            attachCellClickHandlers();
+        });
+    }
+
+    init();
+</script>
+</body>
+</html>
